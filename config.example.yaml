@@ -28,6 +28,8 @@ security:
 #     port: 8484
 #     token: "env:SERVER_TOKEN"         # Required — Bearer token for API auth
 #     publicDir: /app/public            # Optional — defaults to ./public
+#     host: "127.0.0.1"                 # Bind address — use "0.0.0.0" for Docker
+#     trustProxy: false                 # Set true behind a reverse proxy (nginx, Caddy)
 
 # files:
 #     roots:
@@ -38,7 +40,3 @@ security:
 # extensions:
 #     dir: /path/to/extensions     # Directory containing extension subdirectories
                                     # Each subdirectory must have a manifest.yaml
-
-# Legacy (still works — equivalent to files.roots.vault):
-# vault:
-#     path: /path/to/vault

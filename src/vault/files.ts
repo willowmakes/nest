@@ -319,9 +319,6 @@ export class WorkspaceFiles {
     }
 }
 
-// Backward compat — old name still exported
-
-
 export class FilePathError extends Error {
     constructor(message: string) {
         super(message);
