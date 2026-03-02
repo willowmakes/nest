@@ -227,8 +227,7 @@ export default function Chat() {
         wsRef.current = ws;
 
         ws.onopen = () => {
-            // Cookie is sent automatically on upgrade — no post-connect auth needed
-            setConnected(true);
+            // Cookie sent on upgrade — wait for server auth_ok confirmation
         };
 
         ws.onclose = () => {
@@ -264,6 +263,11 @@ export default function Chat() {
 
     const handleWsMessage = (data: any) => {
         if (!mountedRef.current) return;
+
+        if (data.type === "auth_ok") {
+            setConnected(true);
+            return;
+        }
 
         // Only show events from websocket-initiated messages
         if (data.source && data.source !== "websocket") return;

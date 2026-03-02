@@ -71,6 +71,8 @@ const MAX_BODY_SIZE = 1_048_576; // 1MB
 const WS_RATE_WINDOW_MS = 60_000;
 const WS_RATE_MAX = 120;
 
+const SESSION_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
+
 type RouteHandler = (req: IncomingMessage, res: ServerResponse) => void | Promise<void>;
 export type WsRpcHandler = (message: { type: string; [key: string]: unknown }, clientId: string) => Promise<any>;
 
@@ -507,8 +509,16 @@ export class HttpServer {
                 return;
             }
 
+            // Clean up expired sessions on login
+            const now = Date.now();
+            for (const [id, session] of this.sessions) {
+                if (now - session.createdAt >= SESSION_MAX_AGE_MS) {
+                    this.sessions.delete(id);
+                }
+            }
+
             const sessionId = randomBytes(32).toString("hex");
-            this.sessions.set(sessionId, { createdAt: Date.now() });
+            this.sessions.set(sessionId, { createdAt: now });
 
             const secure = this.config.trustProxy ? "; Secure" : "";
             res.setHeader("Set-Cookie",
@@ -921,6 +931,7 @@ export class HttpServer {
             } else {
                 // Already authenticated via header — add to clients immediately
                 this.wsClients.set(clientId, ws);
+                this.wsSend(ws, { type: "auth_ok" });
                 logger.info("WebSocket client connected at /attach (pre-authenticated)", { clientId });
             }
 
@@ -935,13 +946,24 @@ export class HttpServer {
 
                 // Handle first-message auth for browser clients
                 if (!authenticated) {
-                    if (msg.type === "auth" && msg.token === this.config.token) {
-                        authenticated = true;
-                        if (authTimeout) clearTimeout(authTimeout);
-                        this.wsClients.set(clientId, ws);
-                        this.wsSend(ws, { type: "auth_ok" });
-                        logger.info("WebSocket client connected at /attach (message auth)", { clientId });
-                        return;
+                    if (msg.type === "auth" && typeof msg.token === "string") {
+                        const provided = Buffer.from(msg.token);
+                        const expected = Buffer.from(this.config.token);
+                        let valid = false;
+                        if (provided.length === expected.length) {
+                            valid = timingSafeEqual(provided, expected);
+                        } else {
+                            const dummy = Buffer.alloc(expected.length);
+                            timingSafeEqual(expected, dummy);
+                        }
+                        if (valid) {
+                            authenticated = true;
+                            if (authTimeout) clearTimeout(authTimeout);
+                            this.wsClients.set(clientId, ws);
+                            this.wsSend(ws, { type: "auth_ok" });
+                            logger.info("WebSocket client connected at /attach (message auth)", { clientId });
+                            return;
+                        }
                     }
                     // Auth failed
                     if (authTimeout) clearTimeout(authTimeout);
@@ -1004,8 +1026,15 @@ export class HttpServer {
     private authenticate(req: IncomingMessage): boolean {
         // Check session cookie first (browser clients)
         const sessionId = this.parseCookie(req);
-        if (sessionId && this.sessions.has(sessionId)) {
-            return true;
+        if (sessionId) {
+            const session = this.sessions.get(sessionId);
+            if (session) {
+                if (Date.now() - session.createdAt < SESSION_MAX_AGE_MS) {
+                    return true;
+                }
+                // Session expired — remove it
+                this.sessions.delete(sessionId);
+            }
         }
 
         // Fall back to Bearer token (TUI/programmatic clients)
