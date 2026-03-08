@@ -13,10 +13,10 @@
 
 import {
     ProcessTerminal, TUI, Container, Text, Spacer, Markdown,
-    Editor, matchesKey, Key,
+    Editor, matchesKey, Key, visibleWidth,
 } from "@mariozechner/pi-tui";
 import type { MarkdownTheme, EditorTheme } from "@mariozechner/pi-tui";
-import { execSync } from "node:child_process";
+import figlet from "figlet";
 import WebSocket from "ws";
 
 // ─── Theme ──────────────────────────────────────────────────
@@ -73,9 +73,52 @@ interface ChatMessage {
 
 // ─── TUI ────────────────────────────────────────────────────
 
-function generateBanner(name: string): string | null {
+// ─── Lolcat ─────────────────────────────────────────────────
+
+function hslToRgb(h: number): [number, number, number] {
+    // HSL to RGB with s=1, l=0.5 (fully saturated)
+    const c = 1;
+    const x = c * (1 - Math.abs((h / 60) % 2 - 1));
+    let r = 0, g = 0, b = 0;
+    if (h < 60) { r = c; g = x; }
+    else if (h < 120) { r = x; g = c; }
+    else if (h < 180) { g = c; b = x; }
+    else if (h < 240) { g = x; b = c; }
+    else if (h < 300) { r = x; b = c; }
+    else { r = c; b = x; }
+    return [Math.round(r * 255), Math.round(g * 255), Math.round(b * 255)];
+}
+
+function lolcat(text: string, seed = 0, freq = 0.1, spread = 3): string {
+    const lines = text.split("\n");
+    return lines.map((line, y) => {
+        let result = "";
+        let col = 0;
+        for (let i = 0; i < line.length; i++) {
+            const ch = line[i];
+            // Skip ANSI escape sequences
+            if (ch === "\x1b") {
+                const end = line.indexOf("m", i);
+                if (end !== -1) {
+                    result += line.slice(i, end + 1);
+                    i = end;
+                    continue;
+                }
+            }
+            const hue = ((seed + col / spread + y / spread) * freq * 360) % 360;
+            const [r, g, b] = hslToRgb(Math.abs(hue));
+            result += `\x1b[38;2;${r};${g};${b}m${ch}`;
+            col++;
+        }
+        return result + R;
+    }).join("\n");
+}
+
+function generateBanner(name: string, font = "ANSI Shadow"): string[] | null {
     try {
-        return execSync(`figlet -f "ANSI Shadow" "${name}"`, { encoding: "utf-8", timeout: 2000 }).trimEnd();
+        const text = figlet.textSync(name, { font: font as figlet.Fonts });
+        const colored = lolcat(text, Math.random() * 100);
+        return colored.split("\n");
     } catch {
         return null;
     }
@@ -147,9 +190,12 @@ export function startTui(ws: WebSocket, workspaceName: string): void {
     function rebuildMessages(): void {
         messageArea.clear();
 
-        // Banner
+        // Banner — render as pre-formatted lines
         if (banner) {
-            messageArea.addChild(new Text(`${CYAN}${banner}${R}`, 1, 1));
+            for (const line of banner) {
+                messageArea.addChild(new Text(line, 1, 0));
+            }
+            messageArea.addChild(new Spacer(1));
         }
 
         if (messages.length === 0) {
