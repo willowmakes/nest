@@ -40,6 +40,8 @@ export interface MessageOrigin {
 
 export interface Listener {
     readonly name: string;
+    /** Whether this listener wants streaming text deltas. Default: false. */
+    readonly streaming?: boolean;
     connect(): Promise<void>;
     disconnect(): Promise<void>;
     onMessage(handler: (msg: IncomingMessage) => void): void;

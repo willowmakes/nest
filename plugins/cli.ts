@@ -36,6 +36,7 @@ interface PendingPrompt {
 
 class CliListener implements Listener {
     readonly name = "cli";
+    readonly streaming = true;
     private wss: WebSocketServer;
     private clients = new Map<string, CliClient>();
     private activeClient: CliClient | null = null;  // most recent client

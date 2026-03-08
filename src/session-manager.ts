@@ -275,6 +275,9 @@ export class SessionManager extends EventEmitter {
     ): Promise<void> {
         const bindings = this.getListeners(sessionName);
         for (const { listener, origin } of bindings) {
+            // Only deliver stream deltas to listeners that opted in.
+            if (kind === "stream" && !listener.streaming) continue;
+
             // Resolve wildcard channels: use the actual message origin
             // when the binding uses "*" (meaning "all channels").
             // Skip the send entirely if wildcard can't be resolved

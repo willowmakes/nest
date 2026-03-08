@@ -167,5 +167,21 @@ describe("SessionManager", () => {
             await sm.broadcast("main", "nobody here");
             // No error thrown
         });
+
+        it("only sends stream events to listeners with streaming enabled", async () => {
+            const streaming = new MockListener("cli", true);
+            const nonStreaming = new MockListener("discord");
+            sm.attach("main", streaming, { platform: "cli", channel: "tty" });
+            sm.attach("main", nonStreaming, { platform: "discord", channel: "123" });
+
+            await sm.broadcast("main", "delta", undefined, undefined, "stream");
+            expect(streaming.sent).toHaveLength(1);
+            expect(nonStreaming.sent).toHaveLength(0);
+
+            // Final text goes to both
+            await sm.broadcast("main", "full response", undefined, undefined, "text");
+            expect(streaming.sent).toHaveLength(2);
+            expect(nonStreaming.sent).toHaveLength(1);
+        });
     });
 });

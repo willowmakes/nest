@@ -2,13 +2,15 @@ import type { Listener, IncomingMessage, MessageOrigin, OutgoingFile } from "../
 
 export class MockListener implements Listener {
     readonly name: string;
+    readonly streaming: boolean;
     private handler?: (msg: IncomingMessage) => void;
     sent: Array<{ origin: MessageOrigin; text: string; files?: OutgoingFile[] }> = [];
     typingSent: MessageOrigin[] = [];
     connected = false;
 
-    constructor(name = "test") {
+    constructor(name = "test", streaming = false) {
         this.name = name;
+        this.streaming = streaming;
     }
 
     async connect(): Promise<void> { this.connected = true; }
