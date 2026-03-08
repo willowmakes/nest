@@ -1,7 +1,21 @@
 import { readdir, stat } from "node:fs/promises";
-import { join, resolve } from "node:path";
+import { join, resolve, dirname } from "node:path";
+import { fileURLToPath } from "node:url";
+import { createJiti } from "jiti";
 import type { NestAPI, NestPlugin } from "./types.js";
 import * as logger from "./logger.js";
+
+const __srcDir = dirname(fileURLToPath(import.meta.url));
+const __projectDir = resolve(__srcDir, "..");
+
+/** Build jiti aliases so plugins can `import "nest"` from anywhere. */
+function buildAliases(): Record<string, string> {
+    return {
+        "nest": resolve(__srcDir, "types.ts"),
+        "nest/chunking": resolve(__srcDir, "chunking.ts"),
+        "nest/logger": resolve(__srcDir, "logger.ts"),
+    };
+}
 
 /**
  * Scan a directory for plugins and load them.
@@ -9,7 +23,8 @@ import * as logger from "./logger.js";
  * A plugin is a subdirectory containing a `nest.ts` file that exports
  * a default function. The function receives a NestAPI instance.
  *
- * Also supports legacy flat `.ts` files for backwards compatibility.
+ * Uses jiti to resolve `import "nest"` to the actual source files,
+ * so plugins work regardless of where they live on disk.
  */
 export async function loadPlugins(pluginsDir: string, api: NestAPI, bustCache = false): Promise<string[]> {
     const dir = resolve(pluginsDir);
@@ -26,6 +41,11 @@ export async function loadPlugins(pluginsDir: string, api: NestAPI, bustCache = 
         throw err;
     }
 
+    const jiti = createJiti(import.meta.url, {
+        moduleCache: !bustCache,
+        alias: buildAliases(),
+    });
+
     for (const entry of entries.sort()) {
         const fullPath = join(dir, entry);
         const st = await stat(fullPath);
@@ -33,7 +53,7 @@ export async function loadPlugins(pluginsDir: string, api: NestAPI, bustCache = 
         let modulePath: string | null = null;
 
         if (st.isDirectory()) {
-            // New convention: subdirectory with nest.ts
+            // Convention: subdirectory with nest.ts
             const nestPath = join(fullPath, "nest.ts");
             try {
                 const nestStat = await stat(nestPath);
@@ -41,7 +61,7 @@ export async function loadPlugins(pluginsDir: string, api: NestAPI, bustCache = 
                     modulePath = nestPath;
                 }
             } catch {
-                // No nest.ts — skip (may be a pi-only plugin like core/)
+                // No nest.ts — may be a pi-only plugin (e.g. core/)
             }
         } else if (st.isFile() && entry.endsWith(".ts") && entry !== "package.json") {
             // Legacy: flat .ts file
@@ -51,10 +71,8 @@ export async function loadPlugins(pluginsDir: string, api: NestAPI, bustCache = 
         if (!modulePath) continue;
 
         try {
-            // Append a query string to bust Node's ESM module cache on reload
-            const importPath = bustCache ? `${modulePath}?t=${Date.now()}` : modulePath;
-            const mod = await import(importPath);
-            const pluginFn: NestPlugin = mod.default;
+            const mod = await jiti.import(modulePath, { default: true }) as any;
+            const pluginFn: NestPlugin = mod.default ?? mod;
 
             if (typeof pluginFn !== "function") {
                 logger.warn("Plugin has no default export function, skipping", { path: modulePath });
