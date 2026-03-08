@@ -6,11 +6,10 @@ import * as logger from "./logger.js";
 /**
  * Scan a directory for plugins and load them.
  *
- * A plugin is:
- *   - A .ts file exporting a default function
- *   - A directory with an index.ts exporting a default function
+ * A plugin is a subdirectory containing a `nest.ts` file that exports
+ * a default function. The function receives a NestAPI instance.
  *
- * Each plugin's default export receives a NestAPI instance.
+ * Also supports legacy flat `.ts` files for backwards compatibility.
  */
 export async function loadPlugins(pluginsDir: string, api: NestAPI, bustCache = false): Promise<string[]> {
     const dir = resolve(pluginsDir);
@@ -33,18 +32,20 @@ export async function loadPlugins(pluginsDir: string, api: NestAPI, bustCache = 
 
         let modulePath: string | null = null;
 
-        if (st.isFile() && entry.endsWith(".ts")) {
-            modulePath = fullPath;
-        } else if (st.isDirectory()) {
-            const indexPath = join(fullPath, "index.ts");
+        if (st.isDirectory()) {
+            // New convention: subdirectory with nest.ts
+            const nestPath = join(fullPath, "nest.ts");
             try {
-                const indexStat = await stat(indexPath);
-                if (indexStat.isFile()) {
-                    modulePath = indexPath;
+                const nestStat = await stat(nestPath);
+                if (nestStat.isFile()) {
+                    modulePath = nestPath;
                 }
             } catch {
-                // No index.ts, skip
+                // No nest.ts — skip (may be a pi-only plugin like core/)
             }
+        } else if (st.isFile() && entry.endsWith(".ts") && entry !== "package.json") {
+            // Legacy: flat .ts file
+            modulePath = fullPath;
         }
 
         if (!modulePath) continue;
@@ -61,7 +62,7 @@ export async function loadPlugins(pluginsDir: string, api: NestAPI, bustCache = 
             }
 
             await pluginFn(api);
-            const name = entry.replace(/\.ts$/, "");
+            const name = st.isDirectory() ? entry : entry.replace(/\.ts$/, "");
             loaded.push(name);
             logger.info("Plugin loaded", { name, path: modulePath });
         } catch (err) {
@@ -70,4 +71,37 @@ export async function loadPlugins(pluginsDir: string, api: NestAPI, bustCache = 
     }
 
     return loaded;
+}
+
+/**
+ * Discover pi extensions (pi.ts files) in plugin subdirectories.
+ * Returns absolute paths to all pi.ts files found.
+ */
+export async function discoverExtensions(pluginsDir: string): Promise<string[]> {
+    const dir = resolve(pluginsDir);
+    const extensions: string[] = [];
+
+    let entries: string[];
+    try {
+        entries = await readdir(dir);
+    } catch {
+        return extensions;
+    }
+
+    for (const entry of entries.sort()) {
+        const fullPath = join(dir, entry);
+        try {
+            const st = await stat(fullPath);
+            if (!st.isDirectory()) continue;
+            const piPath = join(fullPath, "pi.ts");
+            const piStat = await stat(piPath);
+            if (piStat.isFile()) {
+                extensions.push(piPath);
+            }
+        } catch {
+            // No pi.ts, skip
+        }
+    }
+
+    return extensions;
 }

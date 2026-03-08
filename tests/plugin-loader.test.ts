@@ -61,11 +61,11 @@ describe("loadPlugins", () => {
         expect(api.registerCommand).toHaveBeenCalledWith("test", expect.any(Object));
     });
 
-    it("loads directory plugins with index.ts", async () => {
+    it("loads directory plugins with nest.ts", async () => {
         const dir = join(TMP, "dirplugin");
         const pluginDir = join(dir, "my-plugin");
         mkdirSync(pluginDir, { recursive: true });
-        writeFileSync(join(pluginDir, "index.ts"), `
+        writeFileSync(join(pluginDir, "nest.ts"), `
             export default function(nest) {
                 nest.registerMiddleware({ name: "test-mw", process: async (m) => m });
             }

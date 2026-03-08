@@ -61,8 +61,8 @@ describe("Kernel.buildNestContext", () => {
         const ctx = kernel.buildNestContext();
         expect(ctx).toContain("types.ts");
         expect(ctx).toContain("README.md");
-        expect(ctx).toContain("extensions");
-        expect(ctx).toContain("nest_reboot()");
+        expect(ctx).toContain("pi.ts");
+        expect(ctx).toContain("nest.ts");
     });
 
     it("includes registered commands", () => {

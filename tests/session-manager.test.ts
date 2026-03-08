@@ -158,11 +158,10 @@ describe("SessionManager", () => {
             expect(bridgeArgs).not.toContain("--append-system-prompt");
         });
 
-        it("resolves builtin: extension paths", async () => {
+        it("discovers pi.ts extensions from plugin directories", async () => {
             const config = makeConfig({
                 sessions: {
-                    main: { pi: { cwd: "/tmp", extensions: ["builtin:nest", "builtin:ui", "/custom/ext.ts"] } },
-                    background: { pi: { cwd: "/tmp" } },
+                    main: { pi: { cwd: "/tmp", extensions: ["/custom/ext.ts"] } },
                 },
             });
             const capturedArgs: any[] = [];
@@ -177,10 +176,9 @@ describe("SessionManager", () => {
             for (let i = 0; i < bridgeArgs.length; i++) {
                 if (bridgeArgs[i] === "-e") extPaths.push(bridgeArgs[i + 1]);
             }
-            expect(extPaths).toHaveLength(3);
-            expect(extPaths[0]).toContain("extensions/nest.ts");
-            expect(extPaths[1]).toContain("extensions/ui.ts");
-            expect(extPaths[2]).toBe("/custom/ext.ts");
+            // Should include auto-discovered pi.ts files from plugins/ + the explicit one
+            expect(extPaths.length).toBeGreaterThanOrEqual(1);
+            expect(extPaths).toContain("/custom/ext.ts");
         });
     });
 

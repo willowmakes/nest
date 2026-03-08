@@ -4,7 +4,7 @@
  * Configures:
  *   1. Workspace (working directory for pi)
  *   2. Model provider + API key → writes ~/.pi/agent/models.json
- *   3. Session (name, extensions)
+ *   3. Session (name)
  *   4. Listeners (Discord) + credentials
  *   5. HTTP server (port, auth token)
  *   6. Cron directory
@@ -300,7 +300,7 @@ interface WizardState {
     customBaseUrl?: string;
     customModelId?: string;
     sessionName: string;
-    extensions: string[];
+
     enableDiscord: boolean;
     discordToken?: string;
     discordChannels: Record<string, string>;
@@ -332,7 +332,6 @@ function buildConfig(state: WizardState): Record<string, unknown> {
     const sessionConfig: Record<string, unknown> = {
         pi: {
             cwd: state.workDir,
-            ...(state.extensions.length > 0 ? { extensions: state.extensions } : {}),
         },
     };
     config.sessions = { [state.sessionName]: sessionConfig };
@@ -563,7 +562,7 @@ async function stepProvider(): Promise<{
     return { provider, apiKey, customBaseUrl, customModelId };
 }
 
-async function stepSession(): Promise<{ name: string; extensions: string[] }> {
+async function stepSession(): Promise<{ name: string }> {
     const name = guard(
         await p.text({
             message: "Session name",
@@ -576,36 +575,9 @@ async function stepSession(): Promise<{ name: string; extensions: string[] }> {
         }),
     );
 
-    // Offer built-in extensions (nest tools + block protocol UI).
-    // Use "builtin:" prefix — resolved by the session manager at runtime
-    // so config.yaml survives installation moves and Docker deployments.
-    const builtinNest = "builtin:nest";
-    const builtinUi = "builtin:ui";
+    // Extensions are auto-discovered from plugin pi.ts files — no manual config needed.
 
-    const useBuiltins = guard(
-        await p.confirm({
-            message: "Enable nest tools (nest_command, nest_reboot, show_image, confirm, select)?",
-            initialValue: true,
-        }),
-    );
-
-    const extInput = guard(
-        await p.text({
-            message: "Additional pi extensions (comma-separated paths, or empty for none)",
-            initialValue: "",
-        }),
-    );
-
-    const extensions = extInput
-        .split(",")
-        .map((e) => e.trim())
-        .filter(Boolean);
-
-    if (useBuiltins) {
-        extensions.unshift(builtinNest, builtinUi);
-    }
-
-    return { name, extensions };
+    return { name };
 }
 
 async function stepListeners(sessionName: string): Promise<{
@@ -1028,22 +1000,24 @@ function writeOutput(state: WizardState): void {
         writeFileSync(pluginsPkg, '{"type": "module"}\n');
     }
 
-    const pluginsToCopy: string[] = ["commands.ts"];
-    if (state.enableServer) pluginsToCopy.push("cli.ts", "dashboard.ts", "webhook.ts");
-    if (state.enableDiscord) pluginsToCopy.push("discord.ts");
-    for (const plugin of pluginsToCopy) {
-        const src = join(PLUGINS_SOURCE, plugin);
-        const dest = join(pluginsDir, plugin);
-        if (existsSync(src)) {
-            if (!existsSync(dest)) {
-                copyFileSync(src, dest);
-                p.log.success(`Copied: plugins/${plugin}`);
-            } else {
-                p.log.info(`Exists: plugins/${plugin} (skipped)`);
-            }
-        } else {
-            p.log.warn(`Not found: ${src}`);
+    // Each plugin is a subdirectory with nest.ts and/or pi.ts
+    const pluginDirs: string[] = ["core", "commands"];
+    if (state.enableServer) pluginDirs.push("cli", "dashboard", "webhook");
+    if (state.enableDiscord) pluginDirs.push("discord");
+
+    for (const pluginName of pluginDirs) {
+        const srcDir = join(PLUGINS_SOURCE, pluginName);
+        const destDir = join(pluginsDir, pluginName);
+        if (!existsSync(srcDir)) {
+            p.log.warn(`Plugin source not found: ${srcDir}`);
+            continue;
         }
+        if (existsSync(destDir)) {
+            p.log.info(`Exists: plugins/${pluginName}/ (skipped)`);
+            continue;
+        }
+        cpSync(srcDir, destDir, { recursive: true });
+        p.log.success(`Copied: plugins/${pluginName}/`);
     }
 
     // 4. Create cron directory
@@ -1188,7 +1162,6 @@ export async function runInitWizard(nameHint?: string): Promise<InitResult | nul
         customBaseUrl,
         customModelId,
         sessionName: session.name,
-        extensions: session.extensions,
         ...listeners,
         enableServer: server.enable,
         serverPort: server.port,

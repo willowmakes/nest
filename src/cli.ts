@@ -25,13 +25,6 @@ import { spawnSync } from "node:child_process";
 
 const __srcDir = dirname(fileURLToPath(import.meta.url));
 
-function resolveExtensionPath(ext: string): string {
-    if (ext.startsWith("builtin:")) {
-        return resolve(__srcDir, "..", "extensions", ext.slice("builtin:".length) + ".ts");
-    }
-    return ext;
-}
-
 // ─── Workspace Registry ─────────────────────────────────────
 
 const NEST_HOME = join(homedir(), ".nest");

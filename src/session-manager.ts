@@ -7,15 +7,7 @@ import type { Config, SessionConfig, SessionState, Listener, MessageOrigin, Bloc
 import * as logger from "./logger.js";
 
 const __srcDir = dirname(fileURLToPath(import.meta.url));
-const BUILTIN_EXT_DIR = resolve(__srcDir, "..", "extensions");
-
-/** Resolve "builtin:name" extension paths to the actual source file. */
-function resolveExtensionPath(ext: string): string {
-    if (ext.startsWith("builtin:")) {
-        return resolve(BUILTIN_EXT_DIR, ext.slice("builtin:".length) + ".ts");
-    }
-    return ext;
-}
+import { discoverExtensions } from "./plugin-loader.js";
 
 interface ListenerBinding {
     listener: Listener;
@@ -124,10 +116,16 @@ export class SessionManager extends EventEmitter {
         const baseArgs = info.config.pi.args ?? ["--mode", "rpc", "--continue"];
         const args = [...baseArgs];
 
-        // Add configured extensions (resolving builtin: prefixes)
+        // Auto-discover pi.ts extensions from plugin directories
+        const pluginsDir = this.config.instance?.pluginsDir ?? "./plugins";
+        const discovered = await discoverExtensions(pluginsDir);
+        for (const ext of discovered) {
+            args.push("-e", ext);
+        }
+        // Also add any explicitly configured extensions
         if (info.config.pi.extensions) {
             for (const ext of info.config.pi.extensions) {
-                args.push("-e", resolveExtensionPath(ext));
+                args.push("-e", ext);
             }
         }
         if (agentDir && !args.some((a) => a === "--session-dir")) {

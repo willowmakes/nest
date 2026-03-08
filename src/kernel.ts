@@ -572,7 +572,6 @@ export class Kernel {
         const pluginsDir = inst?.pluginsDir
             ? resolve(inst.pluginsDir)
             : resolve(projectDir, "plugins");
-        const extensionsDir = resolve(projectDir, "extensions");
         const typesPath = resolve(srcDir, "types.ts");
         const readmePath = resolve(projectDir, "README.md");
 
@@ -597,15 +596,15 @@ export class Kernel {
             `### Commands`,
             `${cmdList} (call via nest_command tool)`,
             ``,
-            `### Writing Plugins & Extensions`,
+            `### Writing Plugins`,
             `- Nest overview & architecture: \`${readmePath}\``,
             `- Plugin API reference (NestAPI, Listener, Middleware, Command): \`${typesPath}\``,
-            `- Existing plugins (working examples): \`${pluginsDir}/\``,
-            `- Existing extensions (tool examples): \`${extensionsDir}/\``,
-            `- To add a plugin: write a \`.ts\` file to \`${pluginsDir}/\`, call \`nest_command("reload")\` to load`,
-            `- To add a tool: write a pi extension to \`${extensionsDir}/\`, call \`nest_reboot()\` to register`,
-            `- \`bot!reload\` hot-reloads all plugins (disconnects listeners, reimports, reconnects)`,
-            `- \`bot!reboot\` restarts the pi session (reloads extensions, fresh context)`,
+            `- Plugins directory: \`${pluginsDir}/\``,
+            `- Each plugin is a subdirectory with \`nest.ts\` (server-side) and/or \`pi.ts\` (agent-side tools)`,
+            `- \`nest.ts\` exports a function receiving NestAPI — registers listeners, commands, middleware`,
+            `- \`pi.ts\` exports a function receiving ExtensionAPI — registers tools for the agent`,
+            `- \`bot!reload\` hot-reloads all nest.ts plugins`,
+            `- \`bot!reboot\` restarts the pi session (picks up new/changed pi.ts extensions)`,
         );
 
         return lines.join("\n");
