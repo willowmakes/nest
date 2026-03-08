@@ -9,14 +9,14 @@ Nest does five things: manages pi sessions, loads plugins, runs cron jobs, handl
 ```mermaid
 graph TB
     subgraph Kernel["NEST KERNEL"]
-        Bridge["Bridge\n(pi RPC)"]
+        Bridge["Bridge (pi RPC)"]
         SM["Session Manager"]
-        Sched["Scheduler\n(cron)"]
-        Config["Config\n(YAML)"]
+        Sched["Scheduler (cron)"]
+        Config["Config (YAML)"]
         PL["Plugin Loader"]
-        HTTP["HTTP Server\n(skeleton)"]
+        HTTP["HTTP Server"]
         Tracker["Usage Tracker"]
-        Core["Core Commands\nstatus · reboot · abort"]
+        Core["Core Commands: status, reboot, abort"]
     end
 
     subgraph Plugins["PLUGINS"]
@@ -50,13 +50,13 @@ graph TB
         Pi2["pi process"]
     end
 
-    D["Discord\n#general"] -->|attached| S1
-    CLI["CLI\nterminal"] -->|attached| S1
-    Cron1["Cron\nmorning"] -->|targets| S1
-    Cron2["Cron\ndream"] -->|targets| S2
+    D["Discord #general"] -->|attached| S1
+    CLI["CLI terminal"] -->|attached| S1
+    Cron1["Cron: morning"] -->|targets| S1
+    Cron2["Cron: dream"] -->|targets| S2
 
-    S1 -. "broadcasts to\nall attached" .-> D
-    S1 -. "broadcasts to\nall attached" .-> CLI
+    S1 -. "broadcasts to all attached" .-> D
+    S1 -. "broadcasts to all attached" .-> CLI
 
     style S1 fill:#ddeeff,stroke:#3c7fbb
     style S2 fill:#ddeeff,stroke:#3c7fbb
@@ -89,11 +89,11 @@ sequenceDiagram
     B->>Pi: JSON-RPC
     Pi-->>B: streaming response
     B-->>K: response text
-    K-->>L: broadcast to ALL<br/>attached listeners
+    K-->>L: broadcast to ALL attached listeners
     L-->>P: Display
 
-    Note over MW: Can block<br/>(return null)
-    Note over K,L: All listeners on<br/>the session see output
+    Note over MW: Can block (return null)
+    Note over K,L: All listeners on the session see output
 ```
 
 ## Plugins
