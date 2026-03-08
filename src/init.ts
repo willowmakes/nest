@@ -1022,6 +1022,12 @@ function writeOutput(state: WizardState): void {
     const pluginsDir = join(configDir, "plugins");
     mkdirSync(pluginsDir, { recursive: true });
 
+    // Plugins are ESM — tsx needs this to avoid CJS fallback
+    const pluginsPkg = join(pluginsDir, "package.json");
+    if (!existsSync(pluginsPkg)) {
+        writeFileSync(pluginsPkg, '{"type": "module"}\n');
+    }
+
     const pluginsToCopy: string[] = ["commands.ts"];
     if (state.enableServer) pluginsToCopy.push("cli.ts", "dashboard.ts", "webhook.ts");
     if (state.enableDiscord) pluginsToCopy.push("discord.ts");

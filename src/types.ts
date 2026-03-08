@@ -99,7 +99,10 @@ export interface ToolEndInfo {
 
 // ─── Forward declarations (avoid circular imports) ──────────
 
-import type { Bridge } from "./bridge.js";
+// Use inline import to avoid circular dependency (bridge.ts imports from types.ts).
+// This keeps types.ts free of top-level imports into internal modules, so plugins
+// can import it without pulling in the full dependency graph.
+type Bridge = import("./bridge.js").Bridge;
 
 // ─── Session Types ──────────────────────────────────────────
 

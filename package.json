@@ -12,18 +12,9 @@
         "nest": "./dist/cli.js"
     },
     "exports": {
-        ".": {
-            "types": "./src/types.ts",
-            "import": "./dist/types.js"
-        },
-        "./chunking": {
-            "types": "./src/chunking.ts",
-            "import": "./dist/chunking.js"
-        },
-        "./logger": {
-            "types": "./src/logger.ts",
-            "import": "./dist/logger.js"
-        }
+        ".": "./src/types.ts",
+        "./chunking": "./src/chunking.ts",
+        "./logger": "./src/logger.ts"
     },
     "scripts": {
         "prepare": "tsc",

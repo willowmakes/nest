@@ -47,8 +47,13 @@ ENV NODE_ENV=production
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
     CMD curl -f http://localhost:8484/health || exit 1
 
-# Make nest importable by name from plugins anywhere in the container
-RUN ln -s /app /usr/local/lib/node_modules/nest
+# Make nest and its dependencies importable from plugins anywhere in the
+# container. Node walks up node_modules dirs from the importing file;
+# symlinking into /node_modules/ (root fallback) covers all locations.
+RUN mkdir -p /node_modules \
+    && for pkg in /app/node_modules/*/; do ln -s "$pkg" /node_modules/ 2>/dev/null || true; done \
+    && for pkg in /app/node_modules/@*/; do ln -s "$pkg" /node_modules/ 2>/dev/null || true; done \
+    && ln -s /app /node_modules/nest
 
 ENTRYPOINT ["/entrypoint.sh"]
 CMD ["bash", "-c", "cd /app && exec node --import tsx/esm dist/cli.js start --config /home/wren/config.yaml"]
