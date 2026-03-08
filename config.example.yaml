@@ -1,40 +1,44 @@
-# ─── Nest Kernel Config ─────────────────────────────────────
+# ─── Nest Config ────────────────────────────────────────────
+# Run `nest init` to generate this interactively.
 
 instance:
-    name: "wren"
+    name: "default"
     dataDir: "."
     pluginsDir: "./plugins"
+    agentDir: "./.pi/agent"    # pi config (models, sessions) — isolated from ~/.pi/agent/
+    # sandbox:
+    #     enabled: true          # run in Docker container
+    #     image: "nest:latest"   # docker image
+    #     network: "host"        # host, none, bridge, or network name
+    #     mounts:                # extra bind mounts
+    #         - "/data:/data:ro"
+    #     readOnly: false        # read-only root filesystem
+    #     user: "1000:1000"      # uid:gid
+    #     memory: "4g"           # memory limit
+    #     cpus: "2.0"            # cpu limit
+    #     capDrop: ["ALL"]       # drop capabilities
+    #     capAdd: ["NET_BIND_SERVICE"]
+    #     noNewPrivileges: true  # default: true
 
 # ─── Sessions ───────────────────────────────────────────────
-# Sessions are independent pi processes. Listeners attach to them.
-# Cron jobs target them. Multiple listeners can watch the same session.
 
 sessions:
-    wren:
+    default:
         pi:
-            cwd: /home/wren
-            extensions:
-                - /app/extensions/attach.ts
-    # background:
-    #     pi:
-    #         cwd: /home/wren
-    #     idleTimeoutMinutes: 30
+            cwd: /home/user
+            # extensions:
+            #     - /path/to/extension.ts
 
-defaultSession: wren
+defaultSession: default
 
 # ─── Server ─────────────────────────────────────────────────
-# HTTP server for API, webhooks, and dashboard.
-# Plugins register their own routes.
 
 # server:
 #     port: 8484
-#     token: "env:SERVER_TOKEN"
+#     token: "nest_your-generated-token"
 #     host: "127.0.0.1"
-#     trustProxy: false
 
 # ─── Cron ───────────────────────────────────────────────────
-# Cron jobs in .md files. Each job targets a session.
-# No more "notify" — output goes to all listeners on that session.
 
 # cron:
 #     dir: ./cron.d
@@ -42,26 +46,22 @@ defaultSession: wren
 
 # ─── Usage Tracking ─────────────────────────────────────────
 
-# tracking:
-#     usageLog: ./usage.jsonl
-#     capacity: 1000
-#     retentionDays: 30
+tracking:
+    usageLog: ./usage.jsonl
+    capacity: 1000
+    retentionDays: 30
 
 # ─── Plugin Config ──────────────────────────────────────────
-# Plugins read their own sections from here.
-# The kernel doesn't validate these — plugins decide what they need.
+# Plugins read their own sections. The kernel doesn't validate these.
 
-discord:
-    token: "env:DISCORD_TOKEN"
-    channels:
-        "1234567890": "wren"    # channel ID -> session name
+# discord:
+#     token: "env:DISCORD_TOKEN"
+#     channels:
+#         "1234567890": "default"
 
 # matrix:
 #     homeserver: https://matrix.example.org
 #     user: "@bot:example.org"
 #     token: "env:MATRIX_TOKEN"
 #     channels:
-#         "!room:example.org": "wren"
-
-# dashboard:
-#     publicDir: ./public
+#         "!room:example.org": "default"

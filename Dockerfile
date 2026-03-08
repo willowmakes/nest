@@ -1,39 +1,41 @@
-FROM node:22-slim AS build
+# ─── Nest: sandboxed agent gateway ───────────────────────────
+# Multi-stage build: build nest, then run in a nix-enabled container
+#
+# The workspace directory is bind-mounted at /workspace.
+# Nix is available for the agent to install arbitrary dependencies.
+
+# ─── Stage 1: Build ─────────────────────────────────────────
+FROM node:22-bookworm-slim AS build
+
 WORKDIR /app
-COPY package.json package-lock.json ./
-RUN npm ci
-COPY tsconfig.json ./
-COPY src/ src/
+COPY package*.json ./
+RUN npm ci --ignore-scripts
+COPY . .
 RUN npx tsc
 
-FROM node:22
+# ─── Stage 2: Runtime ───────────────────────────────────────
+FROM nixos/nix:latest AS runtime
 
-# Tools pi expects
-RUN apt-get update && apt-get install -y \
-    git openssh-client curl wget jq ripgrep fd-find fzf \
-    tree less vim-tiny build-essential python3 python3-pip \
-    python3-venv ca-certificates dnsutils iptables \
-    && rm -rf /var/lib/apt/lists/*
+# Install node in the nix environment
+RUN nix-channel --update && \
+    nix-env -iA nixpkgs.nodejs_22 nixpkgs.git nixpkgs.openssh nixpkgs.curl
 
-# pi coding agent
-RUN npm install -g @mariozechner/pi-coding-agent
-
-# nest kernel
+# Set up working directory
 WORKDIR /app
-COPY package.json package-lock.json ./
-RUN npm ci --omit=dev
-COPY --from=build /app/dist/ dist/
 
-# Plugins — ship examples, agent can add more at runtime
-COPY plugins/ plugins/
+# Copy built nest from build stage
+COPY --from=build /app/dist ./dist
+COPY --from=build /app/node_modules ./node_modules
+COPY --from=build /app/package.json ./package.json
+COPY --from=build /app/plugins ./plugins
 
-# Pi extensions
-COPY src/extensions/ extensions/
+# The workspace is bind-mounted at /workspace at runtime.
+# It contains: config.yaml, plugins/, cron.d/, .pi/agent/, usage.jsonl
+#
+# The agent's working directory (pi cwd) is also bind-mounted
+# at its original path so file operations work naturally.
 
-COPY scripts/entrypoint.sh /entrypoint.sh
+ENV NODE_ENV=production
 
-HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-    CMD curl -f http://localhost:8484/health || exit 1
-
-ENTRYPOINT ["/entrypoint.sh"]
-CMD ["node", "dist/main.js", "/config/config.yaml"]
+# Default: start the gateway from the bind-mounted workspace config
+CMD ["node", "dist/cli.js", "start", "--config", "/workspace/config.yaml"]

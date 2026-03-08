@@ -96,6 +96,7 @@ export interface SessionConfig {
         command?: string;
         args?: string[];
         extensions?: string[];
+        agentDir?: string;
     };
     idleTimeoutMinutes?: number;
 }
@@ -121,10 +122,47 @@ export interface TrackingConfig {
     retentionDays?: number;
 }
 
+export interface SandboxConfig {
+    enabled: boolean;
+    image?: string;              // docker image (default: "nest:latest")
+
+    // Filesystem
+    mounts?: string[];           // additional bind mounts (-v host:container[:opts])
+    readOnly?: boolean;          // read-only root filesystem (--read-only)
+    tmpfs?: string[];            // tmpfs mounts (e.g. ["/tmp:size=512m"])
+    nixStore?: string;            // nix store path on host (default: "~/.nest/nix/<name>")
+
+    // Networking
+    network?: string;            // docker network mode: "host", "none", "bridge", or network name
+    dns?: string[];              // custom DNS servers
+    expose?: number[];           // ports to expose (only needed if not using host networking)
+
+    // User & permissions
+    user?: string;               // run as user (--user uid:gid)
+    capDrop?: string[];          // drop capabilities (default: all except needed)
+    capAdd?: string[];           // add capabilities back
+
+    // Resource limits
+    memory?: string;             // memory limit (e.g. "4g")
+    cpus?: string;               // cpu limit (e.g. "2.0")
+    pidsLimit?: number;          // max PIDs
+
+    // Security
+    seccomp?: string;            // seccomp profile path or "unconfined"
+    apparmor?: string;           // apparmor profile
+    noNewPrivileges?: boolean;   // --security-opt no-new-privileges (default: true)
+
+    // Extra
+    env?: Record<string, string>;
+    args?: string[];             // raw docker args appended to the command
+}
+
 export interface InstanceConfig {
     name: string;
     dataDir?: string;
     pluginsDir?: string;
+    agentDir?: string;
+    sandbox?: SandboxConfig;
 }
 
 export interface Config {

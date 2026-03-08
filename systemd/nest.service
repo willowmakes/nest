@@ -4,7 +4,7 @@ After=network.target
 
 [Service]
 Type=simple
-ExecStart=/usr/bin/node %h/nest/dist/main.js %h/nest/config.yaml
+ExecStart=/usr/bin/node %h/nest/dist/cli.js start
 WorkingDirectory=%h/nest
 Restart=on-failure
 RestartSec=5

@@ -334,12 +334,134 @@ discord:
         "123456": "wren"
 ```
 
-## Running
+## Quick Start
 
 ```bash
 npm install
-npm run dev              # tsx src/main.ts
-npm run dev config.yaml  # custom config path
+nest init                    # setup wizard — creates workspace
+nest -w wren start           # start gateway
+```
+
+## CLI
+
+```bash
+nest init [name]             # create workspace (full setup wizard)
+nest start                   # start gateway
+nest attach                  # attach pi TUI to a running session
+nest status                  # show workspace info
+nest list                    # list known workspaces
+
+# Options
+nest -w wren start           # start a named workspace
+nest -w wren attach          # attach TUI to default session
+nest -w wren -s bg attach    # attach TUI to specific session
+```
+
+### Workspaces
+
+A workspace is a self-contained directory. Default location is `~/.nest/<name>/` but you can choose any path during setup.
+
+```
+~/.nest/wren/
+├── config.yaml
+├── plugins/
+├── cron.d/
+├── usage.jsonl
+└── .pi/agent/          ← PI_CODING_AGENT_DIR (isolated from ~/.pi/agent/)
+    ├── models.json
+    ├── sessions/
+    └── settings.json
+```
+
+`nest init` walks through the full setup:
+
+1. **Instance name** — derives workspace path (`~/.nest/<name>/` by default, or custom)
+2. **Agent working directory** — pi's cwd (where the agent works, e.g. `/home/wren`)
+3. **Model provider** — Anthropic, OpenAI, Google, Bedrock, OpenRouter, Groq, xAI, Mistral, or custom OpenAI-compatible
+4. **Session** — name and pi extensions
+5. **Chat platforms** — Discord and/or Matrix with token + channel mapping
+6. **HTTP server** — port and auto-generated auth token
+7. **Cron** — scheduler directory
+
+Workspaces are registered in `~/.nest/workspaces.json` so you can reference them by name from anywhere.
+
+### Pi Isolation
+
+Each workspace has its own `.pi/agent/` directory for `models.json`, sessions, and settings — it **never touches `~/.pi/agent/`**. You can run pi standalone alongside nest without config conflicts. Nest sets `PI_CODING_AGENT_DIR` when spawning pi processes.
+
+### Sandbox
+
+Enable Docker sandboxing per workspace for filesystem isolation. Nix is available inside the container so the agent can install arbitrary dependencies declaratively.
+
+```yaml
+instance:
+    name: wren
+    sandbox:
+        enabled: true
+```
+
+When `sandbox.enabled` is true, `nest start` transparently spawns a Docker container instead of running bare-metal:
+
+- **Workspace = HOME** — workspace dir mounted at `/home/nest`, `HOME=/home/nest`
+- **Pi isolation** — `PI_CODING_AGENT_DIR=/home/nest/.pi/agent`
+- **Nix available** — agent can `nix-env -iA nixpkgs.foo` for any dependency
+- **Host networking** by default
+- **no-new-privileges** enabled by default
+
+Full sandbox options:
+
+```yaml
+instance:
+    sandbox:
+        enabled: true
+        image: "nest:latest"
+
+        # Filesystem
+        mounts:                          # extra bind mounts
+            - "/data/shared:/shared:ro"
+            - "/var/log:/logs"
+        readOnly: false                  # read-only root filesystem
+        tmpfs:                           # tmpfs mounts
+            - "/tmp:size=1g"
+
+        # Networking
+        network: "host"                  # host, none, bridge, or network name
+        dns:                             # custom DNS
+            - "1.1.1.1"
+        expose:                          # port forwarding (non-host networks)
+            - 8484
+
+        # User & permissions
+        user: "1000:1000"                # run as uid:gid
+        capDrop:                         # drop capabilities
+            - "ALL"
+        capAdd:                          # add back specific capabilities
+            - "NET_BIND_SERVICE"
+
+        # Resource limits
+        memory: "4g"
+        cpus: "2.0"
+        pidsLimit: 256
+
+        # Security
+        seccomp: "/path/to/profile.json"
+        apparmor: "nest-profile"
+        noNewPrivileges: true            # default: true
+
+        # Extra
+        env:
+            SOME_VAR: "value"
+        args:                            # raw docker flags
+            - "--gpus=all"
+```
+
+### Attach
+
+`nest attach` spawns pi in interactive TUI mode, pointed at the same session files as the running gateway. Both the gateway and the attached pi share the same conversation history.
+
+```bash
+nest -w wren attach              # default session
+nest -w wren -s background attach # specific session
 ```
 
 ## Writing Plugins
@@ -355,8 +477,9 @@ The agent can write plugins too — that's the point.
 
 ```
 nest/
-├── src/                    # Kernel (~2,700 lines)
-│   ├── main.ts             # Entry point
+├── src/                    # Kernel (~3,200 lines)
+│   ├── cli.ts              # CLI entry point (nest init/start/attach/status/list)
+│   ├── init.ts             # Setup wizard
 │   ├── kernel.ts           # Core orchestration
 │   ├── bridge.ts           # RPC pipe to pi
 │   ├── session-manager.ts  # Sessions (central hub)

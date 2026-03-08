@@ -8,14 +8,19 @@
     "engines": {
         "node": ">=22.0.0"
     },
+    "bin": {
+        "nest": "./dist/cli.js"
+    },
     "scripts": {
         "build": "tsc",
-        "dev": "tsx src/main.ts",
-        "start": "node dist/main.js",
+        "nest": "tsx src/cli.ts",
+        "dev": "tsx src/cli.ts start",
+        "start": "node dist/cli.js start",
         "test": "vitest run",
         "test:watch": "vitest"
     },
     "dependencies": {
+        "@clack/prompts": "^1.1.0",
         "discord.js": "^13.17.1",
         "gray-matter": "^4.0.3",
         "js-yaml": "^4.1.1",

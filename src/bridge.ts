@@ -8,6 +8,7 @@ export interface BridgeOptions {
     cwd: string;
     command?: string;
     args?: string[];
+    env?: Record<string, string>;
     spawnFn?: typeof spawn;
 }
 
@@ -53,6 +54,9 @@ export class Bridge extends EventEmitter {
         this.proc = doSpawn(cmd, args, {
             cwd: this.opts.cwd,
             stdio: ["pipe", "pipe", "pipe"],
+            env: this.opts.env
+                ? { ...process.env, ...this.opts.env }
+                : process.env,
         });
 
         this.proc.stdout!.on("data", (chunk: Buffer) => this.onData(chunk.toString()));
