@@ -4,7 +4,7 @@
  * POST /api/webhook with { message, source?, session? }
  * Response goes to all listeners attached to the target session.
  */
-import type { NestAPI } from "../src/types.js";
+import type { NestAPI } from "nest";
 
 const RATE_WINDOW_MS = 60_000;
 const RATE_MAX = 10;

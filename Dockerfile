@@ -47,7 +47,8 @@ ENV NODE_ENV=production
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
     CMD curl -f http://localhost:8484/health || exit 1
 
-WORKDIR /home/wren
+# Make nest importable by name from plugins anywhere in the container
+RUN ln -s /app /usr/local/lib/node_modules/nest
 
 ENTRYPOINT ["/entrypoint.sh"]
-CMD ["node", "--import", "tsx/esm", "/app/dist/cli.js", "start", "--config", "/home/wren/config.yaml"]
+CMD ["bash", "-c", "cd /app && exec node --import tsx/esm dist/cli.js start --config /home/wren/config.yaml"]

@@ -4,7 +4,7 @@
  * Adds: model, think, compress, new, reload
  * (Core commands status/reboot/abort live in the kernel.)
  */
-import type { NestAPI } from "../src/types.js";
+import type { NestAPI } from "nest";
 
 export default function (nest: NestAPI): void {
     const thinkingState = new Map<string, boolean>();

@@ -20,7 +20,7 @@
  */
 import { WebSocketServer, WebSocket } from "ws";
 import { timingSafeEqual } from "node:crypto";
-import type { NestAPI, Listener, IncomingMessage, MessageOrigin, OutgoingFile, Block } from "../src/types.js";
+import type { NestAPI, Listener, IncomingMessage, MessageOrigin, OutgoingFile, Block } from "nest";
 
 interface CliClient {
     ws: WebSocket;

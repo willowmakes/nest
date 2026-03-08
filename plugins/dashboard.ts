@@ -10,8 +10,8 @@
  */
 import { createReadStream, existsSync, statSync } from "node:fs";
 import { join, extname, resolve } from "node:path";
-import type { NestAPI } from "../src/types.js";
-import { getLogBuffer } from "../src/logger.js";
+import type { NestAPI } from "nest";
+import { getLogBuffer } from "nest/logger";
 
 const MIME_TYPES: Record<string, string> = {
     ".html": "text/html",

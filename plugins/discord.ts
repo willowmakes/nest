@@ -8,8 +8,8 @@
  *       "channel_id": "session_name"
  */
 import { Client, Intents, MessageAttachment } from "discord.js";
-import type { NestAPI, Listener, IncomingMessage, MessageOrigin, Attachment, OutgoingFile, Block } from "../src/types.js";
-import { splitMessage } from "../src/chunking.js";
+import type { NestAPI, Listener, IncomingMessage, MessageOrigin, Attachment, OutgoingFile, Block } from "nest";
+import { splitMessage } from "nest/chunking";
 
 const MAX_ATTACHMENT_SIZE = 25 * 1024 * 1024;
 
