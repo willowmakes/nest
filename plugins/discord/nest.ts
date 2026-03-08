@@ -117,8 +117,12 @@ class DiscordListener implements Listener {
     }
 
     async send(origin: MessageOrigin, text: string, files?: OutgoingFile[], kind?: "text" | "tool" | "stream", blocks?: Block[]): Promise<void> {
-        // Never send streaming deltas to Discord
-        if (kind === "stream") return;
+        // Never send streaming deltas to Discord — if this fires,
+        // the broadcast filter was bypassed somehow.
+        if (kind === "stream") {
+            console.warn("[discord] BUG: stream delta reached send() — broadcast filter bypassed");
+            return;
+        }
 
         const channel = await this.client.channels.fetch(origin.channel);
         if (!channel?.isText() || !("send" in channel)) return;
