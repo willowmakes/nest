@@ -30,6 +30,12 @@ defaultSession: default
 # cron:
 #     dir: ./cron.d
 #     gracePeriodMs: 5000
+#     notify: discord          # comma-separated platform names for cron output
+
+# ─── Attach ─────────────────────────────────────────────────
+
+# attach:
+#     host: 127.0.0.1          # WebSocket host for `nest attach` (e.g. container IP)
 
 # ─── Usage Tracking ─────────────────────────────────────────
 
@@ -43,6 +49,10 @@ tracking:
 
 # discord:
 #     token: "env:DISCORD_TOKEN"
+#     notify: "1234567890"     # channel ID for cron/system notifications
+#     allowed_users:            # only these Discord users can interact (omit to allow all)
+#         - "username1"
+#         - "username2"
 #     channels:
 #         "1234567890": "default"
 
