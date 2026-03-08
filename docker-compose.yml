@@ -17,9 +17,7 @@ services:
             isolated:
             shared-services:
         volumes:
-            - ./config.yaml:/config/config.yaml:ro
             - ../home:/home/wren
-            - ../home/plugins:/app/plugins
             - ~/Documents/Obsidian/Claude:/hades:ro
             - nix-store:/nix
         environment:

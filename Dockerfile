@@ -48,4 +48,4 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
     CMD curl -f http://localhost:8484/health || exit 1
 
 ENTRYPOINT ["/entrypoint.sh"]
-CMD ["node", "--import", "tsx/esm", "dist/cli.js", "start", "--config", "/config/config.yaml"]
+CMD ["node", "--import", "tsx/esm", "dist/cli.js", "start", "--config", "/home/wren/config.yaml"]
