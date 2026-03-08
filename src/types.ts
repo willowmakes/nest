@@ -34,7 +34,7 @@ export interface Listener {
     connect(): Promise<void>;
     disconnect(): Promise<void>;
     onMessage(handler: (msg: IncomingMessage) => void): void;
-    send(origin: MessageOrigin, text: string, files?: OutgoingFile[]): Promise<void>;
+    send(origin: MessageOrigin, text: string, files?: OutgoingFile[], kind?: "text" | "tool" | "stream"): Promise<void>;
     sendTyping?(origin: MessageOrigin): Promise<void>;
     /** Where to send unsolicited output (cron, etc.). Plugin reads its own config. */
     notifyOrigin?(): MessageOrigin | null;

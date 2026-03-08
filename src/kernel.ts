@@ -386,7 +386,7 @@ export class Kernel {
                 images: images.length > 0 ? images : undefined,
                 onToolStart: (info) => {
                     const summary = formatToolCall(info);
-                    this.sessionManager.broadcast(sessionName, summary, undefined, origin).catch(() => {});
+                    this.sessionManager.broadcast(sessionName, summary, undefined, origin, "tool").catch(() => {});
                 },
                 onToolEnd: (info: ToolEndInfo) => {
                     if (info.toolName === "attach" && !info.isError && info.result?.details) {
@@ -397,7 +397,7 @@ export class Kernel {
                     }
                 },
                 onText: (text) => {
-                    this.sessionManager.broadcast(sessionName, text, undefined, origin).catch(() => {});
+                    this.sessionManager.broadcast(sessionName, text, undefined, origin, "stream").catch(() => {});
                 },
             });
 

@@ -192,12 +192,18 @@ export function startTui(ws: WebSocket, workspaceName: string): void {
         try { msg = JSON.parse(rawData.toString()); } catch { return; }
 
         switch (msg.type) {
+            case "stream":
+                handleText(msg.text ?? "");
+                break;
             case "text":
+                // Final response — finalize any streaming
+                lastResponseIdx = -1;
                 handleText(msg.text ?? "");
                 break;
             case "tool_start":
+                // Tool breaks the streaming sequence — finalize current response
                 lastResponseIdx = -1;
-                addMessage({ type: "tool", text: msg.tool ?? "tool" });
+                addMessage({ type: "tool", text: msg.text ?? "tool" });
                 break;
             case "files":
                 lastResponseIdx = -1;

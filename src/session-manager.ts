@@ -237,6 +237,7 @@ export class SessionManager extends EventEmitter {
         text: string,
         files?: import("./types.js").OutgoingFile[],
         replyOrigin?: import("./types.js").MessageOrigin,
+        kind?: "text" | "tool" | "stream",
     ): Promise<void> {
         const bindings = this.getListeners(sessionName);
         for (const { listener, origin } of bindings) {
@@ -257,7 +258,7 @@ export class SessionManager extends EventEmitter {
             }
 
             try {
-                await listener.send(resolvedOrigin, text, files);
+                await listener.send(resolvedOrigin, text, files, kind);
             } catch (err) {
                 logger.error("Broadcast send failed", {
                     session: sessionName,

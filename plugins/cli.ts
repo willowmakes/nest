@@ -60,12 +60,13 @@ class CliListener implements Listener {
         this.messageHandler = handler;
     }
 
-    async send(origin: MessageOrigin, text: string, files?: OutgoingFile[]): Promise<void> {
+    async send(origin: MessageOrigin, text: string, files?: OutgoingFile[], kind?: "text" | "tool" | "stream"): Promise<void> {
         const client = this.clients.get(origin.channel);
         if (!client || client.ws.readyState !== WebSocket.OPEN) return;
 
         if (text) {
-            this.wsSend(client.ws, { type: "text", text });
+            const type = kind === "tool" ? "tool_start" : kind === "stream" ? "stream" : "text";
+            this.wsSend(client.ws, { type, text });
         }
         if (files?.length) {
             this.wsSend(client.ws, {
