@@ -1,3 +1,12 @@
+// ─── Block Protocol ──────────────────────────────────────────
+
+export interface Block {
+    id: string;
+    kind: string;
+    data: Record<string, unknown>;
+    fallback: string;
+}
+
 // ─── Core Message Types ───────────────────────────────────────
 
 export interface Attachment {
@@ -34,8 +43,10 @@ export interface Listener {
     connect(): Promise<void>;
     disconnect(): Promise<void>;
     onMessage(handler: (msg: IncomingMessage) => void): void;
-    send(origin: MessageOrigin, text: string, files?: OutgoingFile[], kind?: "text" | "tool" | "stream"): Promise<void>;
+    send(origin: MessageOrigin, text: string, files?: OutgoingFile[], kind?: "text" | "tool" | "stream", blocks?: Block[]): Promise<void>;
     sendTyping?(origin: MessageOrigin): Promise<void>;
+    /** Send an interactive prompt. Resolves when user responds or rejects on timeout/cancel. */
+    sendPrompt?(origin: MessageOrigin, block: Block, timeoutMs: number): Promise<{ value: unknown } | { cancelled: true }>;
     /** Where to send unsolicited output (cron, etc.). Plugin reads its own config. */
     notifyOrigin?(): MessageOrigin | null;
 }

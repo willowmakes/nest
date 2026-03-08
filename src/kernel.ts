@@ -11,11 +11,61 @@ import { loadPlugins } from "./plugin-loader.js";
 import type {
     Config, NestAPI, Listener, Middleware, Command, IncomingMessage,
     MessageOrigin, ToolCallInfo, ToolEndInfo, OutgoingFile, Attachment,
-    ActivityEntry, JobDefinition, RouteHandler,
+    ActivityEntry, JobDefinition, RouteHandler, Block,
 } from "./types.js";
 import * as logger from "./logger.js";
 import { cleanupInbox, saveToInbox } from "./inbox.js";
 import { compressImage } from "./image.js";
+
+/**
+ * Minimal multipart/form-data parser. Handles text fields and binary file parts.
+ */
+function parseMultipart(body: Buffer, boundary: string): Map<string, string | Buffer> {
+    const fields = new Map<string, string | Buffer>();
+    const sep = Buffer.from(`--${boundary}`);
+    const parts: Buffer[] = [];
+    let start = 0;
+
+    // Split body on boundary markers
+    while (true) {
+        const idx = body.indexOf(sep, start);
+        if (idx === -1) break;
+        if (start > 0) {
+            // Trim trailing \r\n before boundary
+            let end = idx;
+            if (end >= 2 && body[end - 2] === 0x0d && body[end - 1] === 0x0a) end -= 2;
+            parts.push(body.subarray(start, end));
+        }
+        start = idx + sep.length;
+        // Skip \r\n after boundary
+        if (body[start] === 0x0d && body[start + 1] === 0x0a) start += 2;
+        // Check for closing --
+        if (body[start] === 0x2d && body[start + 1] === 0x2d) break;
+    }
+
+    for (const part of parts) {
+        // Headers end at first \r\n\r\n
+        const headerEnd = part.indexOf("\r\n\r\n");
+        if (headerEnd === -1) continue;
+        const headerStr = part.subarray(0, headerEnd).toString();
+        const content = part.subarray(headerEnd + 4);
+
+        const nameMatch = headerStr.match(/name="([^"]+)"/);
+        if (!nameMatch) continue;
+        const name = nameMatch[1];
+
+        const filenameMatch = headerStr.match(/filename="([^"]+)"/);
+        if (filenameMatch) {
+            // Binary file part
+            fields.set(name, Buffer.from(content));
+        } else {
+            // Text field
+            fields.set(name, content.toString().trim());
+        }
+    }
+
+    return fields;
+}
 
 const COMMAND_PREFIX = "bot!";
 const RATE_WINDOW_MS = 60_000;
@@ -176,6 +226,191 @@ export class Kernel {
         });
     }
 
+    // ─── Block Protocol Routes ──────────────────────────────
+
+    private registerBlockRoutes(): void {
+        const server = this.httpServer!;
+        const sm = this.sessionManager;
+        const PROMPT_KINDS = new Set(["confirm", "select", "input"]);
+        const MAX_UPLOAD_SIZE = 10 * 1024 * 1024; // 10 MB
+
+        // POST /api/block — send a display block or interactive prompt
+        server.route("POST", "/api/block", async (req, res) => {
+            const body = await server.readJsonBody(req, res);
+            if (!body) return;
+            if (!body.block) {
+                server.json(res, 400, { error: "Missing field: block" });
+                return;
+            }
+
+            const sessionName: string = body.session ?? sm.getDefaultSessionName();
+            const block: Block = body.block;
+            const timeoutMs: number = body.timeout ?? 30_000;
+            const isPrompt = PROMPT_KINDS.has(block.kind);
+
+            if (isPrompt) {
+                const replyOrigin = body.origin as { platform: string; channel: string } | undefined;
+                const listeners = sm.getListeners(sessionName);
+                let responded = false;
+
+                const timeout = setTimeout(() => {
+                    if (!responded) {
+                        responded = true;
+                        server.json(res, 200, { ok: false, error: "timeout", timeout: timeoutMs });
+                    }
+                }, timeoutMs);
+
+                // Find listener matching replyOrigin platform, fall back to first with sendPrompt
+                const target = replyOrigin
+                    ? listeners.find(({ listener }) =>
+                        listener.sendPrompt && listener.name === replyOrigin.platform)
+                    : listeners.find(({ listener }) => listener.sendPrompt);
+
+                if (target?.listener.sendPrompt) {
+                    try {
+                        const result = await target.listener.sendPrompt(target.origin, block, timeoutMs);
+                        if (!responded) {
+                            responded = true;
+                            clearTimeout(timeout);
+                            server.json(res, 200, { ok: true, ...result });
+                        }
+                    } catch {
+                        if (!responded) {
+                            responded = true;
+                            clearTimeout(timeout);
+                            server.json(res, 200, { ok: false, error: "prompt failed" });
+                        }
+                    }
+                } else {
+                    // No listener supports prompts — broadcast fallback text
+                    clearTimeout(timeout);
+                    await sm.broadcast(sessionName, block.fallback);
+                    server.json(res, 200, { ok: false, error: "no interactive listener" });
+                }
+            } else {
+                // Display block — broadcast to all listeners and return immediately
+                await sm.broadcast(sessionName, block.fallback, undefined, undefined, "text", [block]);
+                server.json(res, 200, { ok: true });
+            }
+        });
+
+        // POST /api/block/upload — multipart binary image upload
+        server.route("POST", "/api/block/upload", async (req, res) => {
+            const contentType = req.headers["content-type"] ?? "";
+            if (!contentType.includes("multipart/form-data")) {
+                server.json(res, 400, { error: "Expected multipart/form-data" });
+                return;
+            }
+
+            // Parse multipart boundary
+            const boundaryMatch = contentType.match(/boundary=(.+?)(?:;|$)/);
+            if (!boundaryMatch) {
+                server.json(res, 400, { error: "Missing boundary" });
+                return;
+            }
+
+            try {
+                const rawBody = await new Promise<Buffer>((resolve, reject) => {
+                    const chunks: Buffer[] = [];
+                    let size = 0;
+                    req.on("data", (chunk: Buffer) => {
+                        size += chunk.length;
+                        if (size > MAX_UPLOAD_SIZE) {
+                            req.destroy();
+                            reject(new Error("Payload too large"));
+                            return;
+                        }
+                        chunks.push(chunk);
+                    });
+                    req.on("end", () => resolve(Buffer.concat(chunks)));
+                    req.on("error", reject);
+                });
+
+                const boundary = boundaryMatch[1];
+                const fields = parseMultipart(rawBody, boundary);
+
+                const session = fields.get("session")?.toString() ?? sm.getDefaultSessionName();
+                const id = fields.get("id")?.toString() ?? `img-${Date.now()}`;
+                const filename = fields.get("filename")?.toString() ?? "image.png";
+                const mimeType = fields.get("mimeType")?.toString() ?? "image/png";
+                const fallback = fields.get("fallback")?.toString() ?? `[Image: ${filename}]`;
+                const maxWidth = fields.get("maxWidth")?.toString();
+                const maxHeight = fields.get("maxHeight")?.toString();
+                const file = fields.get("file");
+
+                if (!file || !(file instanceof Buffer)) {
+                    server.json(res, 400, { error: "Missing field: file" });
+                    return;
+                }
+
+                const base64 = file.toString("base64");
+                const data: Record<string, unknown> = { base64, mimeType, filename };
+                if (maxWidth) data.maxWidth = parseInt(maxWidth, 10);
+                if (maxHeight) data.maxHeight = parseInt(maxHeight, 10);
+
+                const block: Block = { id, kind: "image", data, fallback };
+                await sm.broadcast(session, fallback, undefined, undefined, "text", [block]);
+                server.json(res, 200, { ok: true });
+            } catch (err) {
+                if (!res.headersSent) {
+                    server.json(res, 500, { error: String(err) });
+                }
+            }
+        });
+
+        // POST /api/block/update — update an existing block in-place
+        server.route("POST", "/api/block/update", async (req, res) => {
+            const body = await server.readJsonBody(req, res);
+            if (!body) return;
+            if (!body.id) {
+                server.json(res, 400, { error: "Missing field: id" });
+                return;
+            }
+
+            const sessionName: string = body.session ?? sm.getDefaultSessionName();
+            const bindings = sm.getListeners(sessionName);
+            for (const { listener, origin } of bindings) {
+                try {
+                    await listener.send(origin, body.fallback ?? "", undefined, "text", [{
+                        id: body.id,
+                        kind: "__update",
+                        data: body.data ?? {},
+                        fallback: body.fallback ?? "",
+                    }]);
+                } catch (err) {
+                    logger.error("Block update send failed", { error: String(err) });
+                }
+            }
+            server.json(res, 200, { ok: true });
+        });
+
+        // POST /api/block/remove — remove a block
+        server.route("POST", "/api/block/remove", async (req, res) => {
+            const body = await server.readJsonBody(req, res);
+            if (!body) return;
+            if (!body.id) {
+                server.json(res, 400, { error: "Missing field: id" });
+                return;
+            }
+
+            const sessionName: string = body.session ?? sm.getDefaultSessionName();
+            const bindings = sm.getListeners(sessionName);
+            for (const { listener, origin } of bindings) {
+                try {
+                    await listener.send(origin, "", undefined, "text", [{
+                        id: body.id,
+                        kind: "__remove",
+                        data: {},
+                        fallback: "",
+                    }]);
+                } catch (err) {
+                    logger.error("Block remove send failed", { error: String(err) });
+                }
+            }
+            server.json(res, 200, { ok: true });
+        });
+    }
+
     // ─── Boot ────────────────────────────────────────────────
 
     async start(): Promise<void> {
@@ -205,6 +440,11 @@ export class Kernel {
         // Create HTTP server if configured
         if (this.config.server) {
             this.httpServer = new HttpServer(this.config.server);
+        }
+
+        // Register block protocol endpoints
+        if (this.httpServer) {
+            this.registerBlockRoutes();
         }
 
         // Build API and load plugins

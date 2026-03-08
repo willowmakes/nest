@@ -2,7 +2,7 @@ import { EventEmitter } from "node:events";
 import { join, resolve } from "node:path";
 import { Bridge } from "./bridge.js";
 import type { BridgeOptions } from "./bridge.js";
-import type { Config, SessionConfig, SessionState, Listener, MessageOrigin } from "./types.js";
+import type { Config, SessionConfig, SessionState, Listener, MessageOrigin, Block } from "./types.js";
 import * as logger from "./logger.js";
 
 interface ListenerBinding {
@@ -238,6 +238,7 @@ export class SessionManager extends EventEmitter {
         files?: import("./types.js").OutgoingFile[],
         replyOrigin?: import("./types.js").MessageOrigin,
         kind?: "text" | "tool" | "stream",
+        blocks?: Block[],
     ): Promise<void> {
         const bindings = this.getListeners(sessionName);
         for (const { listener, origin } of bindings) {
@@ -258,7 +259,7 @@ export class SessionManager extends EventEmitter {
             }
 
             try {
-                await listener.send(resolvedOrigin, text, files, kind);
+                await listener.send(resolvedOrigin, text, files, kind, blocks);
             } catch (err) {
                 logger.error("Broadcast send failed", {
                     session: sessionName,

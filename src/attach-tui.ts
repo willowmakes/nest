@@ -14,8 +14,9 @@
 import {
     ProcessTerminal, TUI, Container, Text, Spacer, Markdown,
     Editor, matchesKey, Key, truncateToWidth,
+    Image, Box, SelectList, Input,
 } from "@mariozechner/pi-tui";
-import type { MarkdownTheme, EditorTheme } from "@mariozechner/pi-tui";
+import type { MarkdownTheme, EditorTheme, ImageTheme, SelectListTheme, Component } from "@mariozechner/pi-tui";
 import figlet from "figlet";
 import WebSocket from "ws";
 
@@ -64,11 +65,66 @@ const editorTheme: EditorTheme = {
     },
 };
 
+const imageTheme: ImageTheme = {
+    fallbackColor: (s) => `${DIM}${s}${R}`,
+};
+
+// ─── Block Renderers ────────────────────────────────────────
+
+type BlockRenderer = (data: any) => Component;
+const blockRenderers = new Map<string, BlockRenderer>();
+
+blockRenderers.set("image", (data) => {
+    return new Image(data.base64, data.mimeType, imageTheme, {
+        maxWidthCells: data.maxWidth,
+        maxHeightCells: data.maxHeight,
+        filename: data.filename,
+    });
+});
+
+blockRenderers.set("markdown", (data) => new Markdown(data.text, 2, 0, mdTheme));
+
+blockRenderers.set("code", (data) => {
+    const lang = data.language ?? "";
+    return new Markdown(`\`\`\`${lang}\n${data.text}\n\`\`\``, 2, 0, mdTheme);
+});
+
+blockRenderers.set("table", (data) => {
+    const cols: string[] = data.columns ?? [];
+    const header = `| ${cols.join(" | ")} |`;
+    const sep = `| ${cols.map(() => "---").join(" | ")} |`;
+    const rows = (data.rows ?? []).map((r: string[]) => `| ${r.join(" | ")} |`).join("\n");
+    return new Markdown([header, sep, rows].join("\n"), 2, 0, mdTheme);
+});
+
+blockRenderers.set("progress", (data) => {
+    const value = data.value ?? 0;
+    const total = data.total ?? 100;
+    const pct = Math.round((value / total) * 100);
+    const filled = Math.round(pct / 5);
+    const bar = "█".repeat(filled) + "░".repeat(20 - filled);
+    const label = data.label ? ` ${data.label}` : "";
+    return new Text(`${CYAN}[${bar}]${R} ${pct}%${label}`, 2, 0);
+});
+
+blockRenderers.set("status", (data) => {
+    const colors: Record<string, string> = { ok: GREEN, warn: YELLOW, error: RED, dim: DIM };
+    const items = data.items ?? [];
+    const parts = items.map((item: any) => {
+        const c = colors[item.style] ?? "";
+        return `${BOLD}${item.label}:${R} ${c}${item.value}${R}`;
+    });
+    return new Text(parts.join("  │  "), 2, 0);
+});
+
 // ─── Message Types ──────────────────────────────────────────
 
 interface ChatMessage {
-    type: "user" | "response" | "tool" | "system" | "error" | "file";
+    type: "user" | "response" | "tool" | "system" | "error" | "file" | "block";
     text: string;
+    blockId?: string;
+    blockKind?: string;
+    blockData?: Record<string, unknown>;
 }
 
 // ─── TUI ────────────────────────────────────────────────────
@@ -86,6 +142,7 @@ export function startTui(ws: WebSocket, workspaceName: string): void {
     const terminal = new ProcessTerminal();
     const tui = new TUI(terminal, true);
     const messages: ChatMessage[] = [];
+    const blockMap = new Map<string, number>(); // block ID → index in messages
     const banner = generateBanner(workspaceName);
 
     // Message area
@@ -197,6 +254,16 @@ export function startTui(ws: WebSocket, workspaceName: string): void {
                 case "file":
                     messageArea.addChild(new Text(`${MAGENTA}📎 ${msg.text}${R}`, 2, 0));
                     break;
+                case "block": {
+                    const renderer = blockRenderers.get(msg.blockKind ?? "");
+                    if (renderer && msg.blockData) {
+                        messageArea.addChild(renderer(msg.blockData));
+                    } else {
+                        // Unknown kind — render fallback as markdown
+                        messageArea.addChild(new Markdown(msg.text, 2, 0, mdTheme));
+                    }
+                    break;
+                }
             }
             if (i < messages.length - 1) {
                 messageArea.addChild(new Spacer(1));
@@ -238,6 +305,42 @@ export function startTui(ws: WebSocket, workspaceName: string): void {
             case "error":
                 addMessage({ type: "error", text: msg.text ?? "" });
                 break;
+            case "block": {
+                const message: ChatMessage = {
+                    type: "block",
+                    text: msg.fallback ?? "",
+                    blockId: msg.id,
+                    blockKind: msg.kind,
+                    blockData: msg.data,
+                };
+                blockMap.set(msg.id, messages.length);
+                addMessage(message);
+                break;
+            }
+            case "block_update": {
+                const idx = blockMap.get(msg.id);
+                if (idx !== undefined && idx < messages.length) {
+                    messages[idx].blockData = msg.data;
+                    if (msg.fallback) messages[idx].text = msg.fallback;
+                    rebuildMessages();
+                    tui.requestRender();
+                }
+                break;
+            }
+            case "block_remove": {
+                const idx = blockMap.get(msg.id);
+                if (idx !== undefined) {
+                    messages.splice(idx, 1);
+                    blockMap.delete(msg.id);
+                    // Reindex all blocks after the removed one
+                    for (const [id, i] of blockMap) {
+                        if (i > idx) blockMap.set(id, i - 1);
+                    }
+                    rebuildMessages();
+                    tui.requestRender();
+                }
+                break;
+            }
         }
     });
 

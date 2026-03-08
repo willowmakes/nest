@@ -20,7 +20,7 @@
  */
 import { WebSocketServer, WebSocket } from "ws";
 import { timingSafeEqual } from "node:crypto";
-import type { NestAPI, Listener, IncomingMessage, MessageOrigin, OutgoingFile } from "../src/types.js";
+import type { NestAPI, Listener, IncomingMessage, MessageOrigin, OutgoingFile, Block } from "../src/types.js";
 
 interface CliClient {
     ws: WebSocket;
@@ -60,9 +60,38 @@ class CliListener implements Listener {
         this.messageHandler = handler;
     }
 
-    async send(origin: MessageOrigin, text: string, files?: OutgoingFile[], kind?: "text" | "tool" | "stream"): Promise<void> {
+    async send(origin: MessageOrigin, text: string, files?: OutgoingFile[], kind?: "text" | "tool" | "stream", blocks?: Block[]): Promise<void> {
         for (const client of this.clients.values()) {
             if (!client.authenticated || client.ws.readyState !== WebSocket.OPEN) continue;
+
+            // Handle block protocol messages
+            if (blocks?.length) {
+                for (const block of blocks) {
+                    if (block.kind === "__update") {
+                        this.wsSend(client.ws, {
+                            type: "block_update",
+                            id: block.id,
+                            data: block.data,
+                            fallback: block.fallback,
+                        });
+                    } else if (block.kind === "__remove") {
+                        this.wsSend(client.ws, {
+                            type: "block_remove",
+                            id: block.id,
+                        });
+                    } else {
+                        this.wsSend(client.ws, {
+                            type: "block",
+                            id: block.id,
+                            kind: block.kind,
+                            data: block.data,
+                            fallback: block.fallback,
+                        });
+                    }
+                }
+                // Don't send fallback text separately when blocks are present
+                if (!text || blocks.every(b => b.kind !== "__update" && b.kind !== "__remove")) return;
+            }
 
             if (text) {
                 const type = kind === "tool" ? "tool_start" : kind === "stream" ? "stream" : "text";
