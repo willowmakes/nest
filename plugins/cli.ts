@@ -33,6 +33,7 @@ class CliListener implements Listener {
     readonly name = "cli";
     private wss: WebSocketServer;
     private clients = new Map<string, CliClient>();
+    private activeClient: CliClient | null = null;  // most recent client
     private clientCounter = 0;
     private messageHandler?: (msg: IncomingMessage) => void;
     private token: string;
@@ -61,7 +62,7 @@ class CliListener implements Listener {
     }
 
     async send(origin: MessageOrigin, text: string, files?: OutgoingFile[], kind?: "text" | "tool" | "stream"): Promise<void> {
-        const client = this.clients.get(origin.channel);
+        const client = this.activeClient;
         if (!client || client.ws.readyState !== WebSocket.OPEN) return;
 
         if (text) {
@@ -77,7 +78,7 @@ class CliListener implements Listener {
     }
 
     async sendTyping(origin: MessageOrigin): Promise<void> {
-        const client = this.clients.get(origin.channel);
+        const client = this.activeClient;
         if (!client || client.ws.readyState !== WebSocket.OPEN) return;
         this.wsSend(client.ws, { type: "typing" });
     }
@@ -119,6 +120,7 @@ class CliListener implements Listener {
                         client.username = msg.username ?? "cli";
                         clearTimeout(authTimeout);
                         this.clients.set(clientId, client);
+                        this.activeClient = client;
                         this.wsSend(ws, { type: "auth_ok", clientId });
                         this.wsSend(ws, { type: "system", text: `Connected to nest as "${client.username}"` });
                     } else {
@@ -132,7 +134,7 @@ class CliListener implements Listener {
                 if (msg.type === "message" && typeof msg.text === "string" && msg.text.trim()) {
                     this.messageHandler?.({
                         platform: "cli",
-                        channel: clientId,
+                        channel: "terminal",
                         sender: client.username,
                         text: msg.text.trim(),
                     });
@@ -143,6 +145,7 @@ class CliListener implements Listener {
                 clearTimeout(authTimeout);
                 clearInterval(pingInterval);
                 this.clients.delete(clientId);
+                if (this.activeClient?.id === clientId) this.activeClient = null;
                 this.nest.log.info("CLI client disconnected", { clientId });
             });
 
